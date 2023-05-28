@@ -6,13 +6,17 @@ import sys
 
 import openpyxl
 import pandas as pd
-from openpyxl.formatting.rule import Rule
 from openpyxl.styles import PatternFill
-from openpyxl.styles.differential import DifferentialStyle
 
 from utils.calculate_work_hours_and_difference import calculate_work_hours_and_difference
 from utils.prompt import prompt_for_month, prompt_for_day, prompt_for_year
 from utils.validate_input import validate_input
+
+# Define RGB values for red, green, and yellow
+RED = "FF0000"
+GREEN = "00FF00"
+YELLOW = "FFFF00"
+WHITE = "FFFFFF"
 
 
 class WorkHoursTracker:
@@ -87,38 +91,35 @@ class WorkHoursTracker:
         wb = openpyxl.load_workbook("work_hours.xlsx")
         ws = wb[str(month_year_name)]
 
-        # Define the yellow fill
-        yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+        # Apply formatting to the 'hours_diff' column
+        for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=9, max_col=9):
+            for cell in row:
+                if cell.value is not None:
+                    value_str = cell.value.strip('+ -')
+                    if ':' in value_str:
+                        hours, minutes = value_str.split(':')
+                        value = float(hours) + float(minutes) / 60.0
+                    else:
+                        value = float(value_str)
 
-        # Define a differential style with the yellow fill
-        diff_style_yellow = DifferentialStyle(fill=yellow_fill)
+                    if cell.value.startswith('-'):
+                        value = -value
 
-        # Define a rule with the style and the formula
-        rule_weekend = Rule(type="expression", dxf=diff_style_yellow)
-        rule_weekend.formula = ["WEEKDAY($A1, 2)>5"]
+                    if value < 0:
+                        fill = PatternFill(start_color=RED, end_color=RED, fill_type="solid")
+                    elif value > 0:
+                        fill = PatternFill(start_color=GREEN, end_color=GREEN, fill_type="solid")
+                    else:
+                        fill = PatternFill(start_color=WHITE, end_color=WHITE, fill_type="solid")
 
-        # Add the rule to the conditional formatting of the worksheet
-        ws.conditional_formatting.add("A1:I" + str(len(df) + 1), rule_weekend)
+                    cell.fill = fill
 
-        # Define the green and red fill
-        green_fill = PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid")
-        red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
-
-        # Define a differential style with the green and red fill
-        diff_style_green = DifferentialStyle(fill=green_fill)
-        diff_style_red = DifferentialStyle(fill=red_fill)
-
-        # Define a rule with the style and the formula for positive hours_diff
-        rule_positive = Rule(type="expression", dxf=diff_style_green)
-        rule_positive.formula = ["LEFT($I1, 1) = '+'"]
-
-        # Define a rule with the style and the formula for negative hours_diff
-        rule_negative = Rule(type="expression", dxf=diff_style_red)
-        rule_negative.formula = ["LEFT($I1, 1) = '-'"]
-
-        # Add the rule to the conditional formatting of the worksheet
-        ws.conditional_formatting.add("I2:I" + str(len(df) + 1), rule_positive)
-        ws.conditional_formatting.add("I2:I" + str(len(df) + 1), rule_negative)
+                day_row = cell.row
+                day_of_week = df.loc[day_row - 2, "day_of_week"]
+                if day_of_week in ["Saturday", "Sunday"] and cell.value is not None and cell.value != 0:
+                    for cell_in_row in ws[day_row]:
+                        fill = PatternFill(start_color=YELLOW, end_color=YELLOW, fill_type="solid")
+                        cell_in_row.fill = fill
 
         # Save the Excel file
         wb.save("work_hours.xlsx")
@@ -157,7 +158,7 @@ class WorkHoursTracker:
             updated_data = validate_input(incomplete_entry)
             updated_data_dict = calculate_work_hours_and_difference(*updated_data)
             incomplete_entry.update(updated_data_dict)
-            incomplete_entry['status'] = 'complete'  # Mark the entry as complete
+            incomplete_entry['status'] = 'complete'
 
         self.recalculate_work_hours_difference()
         while True:
@@ -174,10 +175,10 @@ class WorkHoursTracker:
                 if "day_of_week" not in data_dict:
                     date_datetime = datetime.datetime.strptime(data_dict["date"], "%Y-%m-%d")
                     data_dict["day_of_week"] = date_datetime.strftime("%A")
-                data_dict['status'] = 'incomplete'  # Mark the entry as incomplete
+                data_dict['status'] = 'incomplete'
                 self.work_hours_data.append(data_dict)
-                self.save_to_json()  # Save the incomplete entry
-                data_dict['status'] = 'complete'  # Mark the entry as complete after saving
+                self.save_to_json()
+                data_dict['status'] = 'complete'
             elif choice == '2':
                 selected_year = prompt_for_year()
                 print("You selected: ", selected_year)

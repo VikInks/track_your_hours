@@ -160,3 +160,6 @@ cython_debug/
 #.idea/
 /work_hours.json
 /work_hours.xlsx
+/improvments/hours_work.xlsx
+/improvments/data.json
+/improvments/config.json
